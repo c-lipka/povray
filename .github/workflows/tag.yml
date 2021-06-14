@@ -1,0 +1,208 @@
+name: 'Tag And Release'
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+    - github_actions
+
+jobs:
+
+  build_windows:
+    name: Visual Studio ${{ matrix.visual-studio }} ${{ matrix.configuration }} ${{ matrix.platform }} ${{ matrix.compatibility}}
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true # If any build fails, we need to re-run anyway.
+      matrix:
+        variant: [64, sse2, 32]
+        compatibility: ['']
+        include:
+        # Set up various options based on compatibility requirements
+        - compatibility: ''
+          visual-studio: 2019
+          os: windows-2019
+          toolset: v142
+          toolset-variant: ''
+          msbuild-options: ''
+          solution: vs2015
+#        - compatibility: 'xp'
+#          visual-studio: 2017
+#          os: windows-2016
+#          toolset: v141
+#          toolset-variant: '_xp'
+#          msbuild-options: '/p:TargetUniversalCRTVersion=10.0.10586.0'
+#          solution: vs2015
+        # Pick configuration / paltform combo
+        - variant: 64
+          configuration: Release
+          platform: x64
+          bin-dir: bin64
+          artifact-suffix: Win64
+        - variant: sse2
+          configuration: Release-SSE2
+          platform: Win32
+          bin-dir: bin32
+          artifact-suffix: Win32-sse2
+        - variant: 32
+          configuration: Release
+          platform: Win32
+          bin-dir: bin32
+          artifact-suffix: Win32
+
+    steps:
+
+    - name: 'Matrix Diagnostics'
+      run: |
+        echo "visual-studio:   '${{matrix.visual-studio}}'"
+        echo "variant:         '${{matrix.variant}}'"
+        echo "compatibility:   '${{matrix.compatibility}}'"
+        echo "---"
+        echo "os:              '${{matrix.os}}'"
+        echo "solution:        '${{matrix.solution}}'"
+        echo "configuration:   '${{matrix.configuration}}'"
+        echo "platform:        '${{matrix.platform}}'"
+        echo "toolset:         '${{matrix.toolset}}${{matrix.toolset-variant}}'"
+        echo "msbuild-options: '${{matrix.msbuild-options}}'"
+
+    - name: 'Check out Repository'
+      uses: actions/checkout@v2
+
+    - name: 'Extract Version Information'
+      uses: c-lipka/povray/.github/actions/unix_get_version@github_actions
+
+    - name: 'Version Information Diagnostics'
+      run: |
+        echo "POV_RAY_COPYRIGHT:    ${{env.POV_RAY_COPYRIGHT}}"
+        echo "POV_RAY_GENERATION:   ${{env.POV_RAY_GENERATION}}"
+        echo "POV_RAY_FULL_VERSION: ${{env.POV_RAY_FULL_VERSION}}"
+        echo "POV_RAY_PRERELEASE:   ${{env.POV_RAY_PRERELEASE}}"
+
+#    - name: 'Add MSBuild to PATH'
+#      uses: microsoft/setup-msbuild@v1.0.2
+
+#    - name: 'Build'
+#      uses: c-lipka/povray/.github/actions/windows_build@master
+#      with:
+#        pov-ray-build-id: gh${{github.run_number}}${{matrix.compatibility}}
+#        solution: ${{matrix.solution}}
+#        configuration: ${{matrix.configuration}}
+#        platform: ${{matrix.platform}}
+#        toolset: ${{matrix.toolset}}${{matrix.toolset-variant}}
+#        msbuild-options: ${{matrix.msbuild-options}}
+
+#    - name: 'Package Binary'
+#      shell: pwsh
+#      run: |
+#        $env:pov_zipdir = "povray-${{env.POV_RAY_FULL_VERSION}}-gh${{github.run_number}}${{matrix.compatibility}}-${{env.artifact_suffix}}"
+#        $env:pov_binary = "Windows\${{matrix.solution}}\${{matrix.bin-dir}}\pvengine*.exe"
+#        $env:pov_zip = "artifacts\" + $env:pov_zipdir + ".7z"
+#        New-Item -ItemType directory -Path $env:pov_zipdir | Out-Null
+#        New-Item -ItemType directory -Path "artifacts" | Out-Null
+#        Copy-Item $env:pov_binary $env:pov_zipdir
+#        & "7z" "a" "-r" $env:pov_zip $env:pov_zipdir
+
+#    - name: 'Upload Binary As Artifact'
+#      uses: actions/upload-artifact@v2
+#      with:
+#        name: artifacts/*.7z
+#        path: artifact_binaries.tar
+
+#  tag:
+#    name: 'Create Tag'
+#    runs-on: ubuntu-latest
+#    requires: build_windows
+#    steps:
+
+#    - name: 'Check out Repository'
+#      uses: actions/checkout@v2
+
+#    - name: 'Extract Version Information'
+#      run: |
+#        eval `./tools/unix/get-source-version.sh ./source/base/version.h`
+#        echo "Copyright String: '$POV_RAY_COPYRIGHT'"
+#        echo "Generation:       '$POV_RAY_GENERATION'"
+#        echo "Version:          '$POV_RAY_FULL_VERSION'"
+#        echo "Prerelease Tag:   '$POV_RAY_PRERELEASE'"
+#        echo "$POV_RAY_FULL_VERSION" > VERSION
+#        echo "tag_name=v$POV_RAY_FULL_VERSION" >> $GITHUB_ENV
+#        echo "prerelease=$POV_RAY_PRERELEASE"  >> $GITHUB_ENV
+#
+#    - name: 'Check Tag ${{ env.tag_name }} For Validity'
+#      run: |
+#        git fetch --tags --quiet
+#        if git rev-parse "${{ env.tag_name }}" >/dev/null 2>&1 ; then
+#          echo "Tag already exists, or conflicts with some other moniker."
+#          exit 1
+#        fi
+#        if ! echo "${{ env.tag_name }}" | egrep '[.][1-9][0-9]*$' ; then
+#          echo "Tag does not end in a numeric field."
+#          exit 1
+#        fi
+#        if test -z "${{ env.prerelease }}" ; then
+#          echo "We only do pre-release tags for now."
+#          exit 1
+#        fi
+#
+#    - name: 'Build Release Message'
+#      env:
+#        release_message_x: |
+#          **EXPERIMENTAL: This version of POV-Ray is not part of the official development branch!**
+#        release_message_binary: |
+#          **Note:** This is a binary-only release; to install, copy the binary into an existing
+#          POV-Ray 3.7 installation. (Make sure to backup the original binary first.
+#        release_message_no_xp: |
+#          These binaries require Windows Vista or higher, due to limitations of our automated
+#          build system. Please contact us on http://news.povray.org/povray.beta-test if you need
+#          Windows XP-compatible binaries of this particular version.
+#      run: |
+#        cp /dev/null ~RELEASE_MESSAGE.txt
+#        case "${{ env.prerelease }}" in
+#          x*)     echo "${{env.release_message_x}}" >> ~RELEASE_MESSAGE.txt
+#                  echo                              >> ~RELEASE_MESSAGE.txt
+#                  release_type="Experimental Release"
+#                  is_prerelease="true"
+#                  ;;
+#          alpha*) release_type="Development Release"
+#                  is_prerelease="true"
+#                  ;;
+#          beta*)  release_type="Beta Release"
+#                  is_prerelease="true"
+#                  ;;
+#          rc*)    release_type="Release Candidate"
+#                  is_prerelease="true"
+#                  ;;
+#          "")     release_type="Release"
+#                  is_prerelease="false"
+#                  ;;
+#          *)      echo "Unable to determine type of release."
+#                  exit 1
+#        esac
+#        echo "release_type=$release_type"   >> $GITHUB_ENV
+#        echo "is_prerelease=$is_prerelease" >> $GITHUB_ENV
+#        echo "${{env.release_message_binary}}" >> ~RELEASE_MESSAGE.txt
+#        echo                                   >> ~RELEASE_MESSAGE.txt
+#        echo "${{env.release_message_no_xp}}"  >> ~RELEASE_MESSAGE.txt
+#        cp /dev/null ~RELEASE_ASSETS.txt
+#        echo "VERSION # A"            >> ~RELEASE_ASSETS.txt
+#        echo "~RELEASE_MESSAGE.txt#B" >> ~RELEASE_ASSETS.txt
+#
+#    - name: Create Tag ${{ env.tag_name }}
+#      run: |
+#        git config --global user.name "${{ secrets.GITHUB_TOKEN }}"
+#        git tag -a -m "POV-Ray ${{ env.release_type }} ${{ env.tag_name }}" "${{ env.tag_name }}"
+#        git push origin "${{ env.tag_name }}"
+#
+#    - name: Draft Release ${{ env.tag_name }}
+#      run: |
+#        if ${{ env.is_prerelease }} ; then
+#          prerelease_switch='--prerelease'
+#        else
+#          prerelease_switch=''
+#        fi
+#        gh auth login --with-token <<< "${{ secrets.GITHUB_TOKEN }}"
+#        gh release create --draft $prerelease_switch                    \
+#          --title "POV-Ray ${{ env.release_type }} ${{ env.tag_name }}" \
+#          --notes-file ~RELEASE_MESSAGE.txt                             \
+#          ${{ env.tag_name }}                                           \
+#          $(echo ~RELEASE_ASSETS.txt)
